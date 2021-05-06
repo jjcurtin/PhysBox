@@ -1,0 +1,93 @@
+%USAGE: [ EEG Indices COM ] = pop_MarkThreshold( EEG, ChanList, LoThresh, HiThresh, WinTimes, Reject )
+%wrapper function to call pop_eegthresh with Curtin lab function naming
+%conventions.   
+%see pop_eegthresh() for details
+%
+%INPUTS
+%EEG:  A epoched SET File
+%ChanList:  Cell array of channel labels.  Accepts 'all' and 'exclude'
+%           notation (see MakeChanList)
+%LoThresh:  Lowest tolerable voltage
+%HiThresh:  Highest tolerable voltage
+%WinTimes: Cell array with start and end tims of window in ms
+%Reject:  Boolean to indicate if marked trials should be rejected
+%         immediately
+%
+%OUTPUTS
+%EEG:  EEG set with trials marked or rejected
+%Indices:  Indices of marked/rejected trials
+%COM:  Data processsing string for history
+
+function [ EEG Indices COM ] = pop_MarkThreshold( EEG, ChanList, LoThresh, HiThresh, WinTimes, Reject )
+        COM = 'pop_MarkThreshold(EEG)';
+        Indices = [];
+    
+    if nargin < 1
+        pophelp('pop_MarkThreshold');
+        return
+    end
+        
+    if nargin < 6  
+        cbButton = ['tmpchanlocs = EEG(1).chanlocs;'...
+                    '[tmp tmpval] = pop_chansel({tmpchanlocs.labels}, ''withindex'', ''on'');'...
+                    'set(findobj(gcbf, ''tag'', ''ChanList''), ''string'',tmpval);'...
+                    'clear tmp tmpchanlocs tmpval']; 
+
+        geometry = {  [1 1 .5] [1 1 .5] [1 1 .5] [1 1 .5] [1 1 .5] [1] [1 1 1]};
+
+        uilist = { ...
+                 { 'Style', 'text', 'string', 'Channels' } ...
+                 { 'Style', 'edit', 'string', '', 'tag', 'ChanList' } ...
+                 { 'style' 'pushbutton' 'string'  '...', 'enable' fastif(isempty(EEG.chanlocs), 'off', 'on') ...
+                   'callback', cbButton  } ...
+                 ...
+                 { 'style' 'text'       'string' 'Window [start, end] in ms' } ...
+                 { 'style' 'edit'       'string' [num2str(EEG.xmin*1000) '     ' num2str(EEG.xmax* 1000)], 'tag' 'WinTimes' } ...
+                 { } ...
+                 ...
+                 { 'style' 'text'       'string' 'Low Threshold (Blank = ignore)' } ...
+                 { 'style' 'edit'       'string' '' 'tag' 'LoThresh' } ...
+                 { } ...
+                 ...
+                 { 'style' 'text'       'string' 'High Threshold (Blank = ignore)' } ...
+                 { 'style' 'edit'       'string' '', 'tag' 'HiThresh' } ...
+                 { } ...         
+                 ...
+                 { 'style' 'text'       'string' 'Reject immediately (vs. mark)' } ...
+                 { 'Style' 'checkbox'   'string' '  ' 'tag' 'Reject' } ...
+                 { } ... 
+                 ...
+                 { } ... 
+                 ...
+                 { } { 'Style', 'pushbutton', 'string', 'Scroll dataset', 'enable', fastif(length(EEG)>1, 'off', 'on'), 'callback', ...
+                                  'eegplot(EEG.data, ''srate'', EEG.srate, ''winlength'', 5, ''limits'', [EEG.xmin EEG.xmax]*1000, ''position'', [100 300 800 500], ''xgrid'', ''off'', ''eloc_file'', EEG.chanlocs);' } {}};
+
+        [op ud sh Results] = inputgui( geometry, uilist, 'pophelp(''pop_MarkThreshold'');', 'Reject Epochs by Threshold -- pop_MarkThreshold()' );
+        if isempty(Results); return; end
+        
+        ChanList = parsetxt(Results.ChanList);
+        WinTimes = parsetxt(Results.WinTimes);
+        LoThresh = str2double(Results.LoThresh); 
+        HiThresh = str2double(Results.HiThresh); 
+        Reject = Results.Reject;
+    end
+    
+    fprintf('\npop_MarkThreshold():  Marking artifactual epochs by threshold method...\n');
+    
+    [ ChanList, ChanInds ] = MakeChanList( EEG, ChanList );
+    
+    if ischar(WinTimes{1}) %from GUI        
+        StartTime = str2double(WinTimes{1});
+        EndTime = str2double(WinTimes{2});
+    else
+        StartTime = WinTimes{1};
+        EndTime = WinTimes{2};
+    end    
+    
+    
+    [EEG Indices] = pop_eegthresh(EEG, 1, ChanInds, LoThresh, HiThresh, StartTime / 1000, EndTime / 1000, 1, Reject);
+    
+    COM = 'EEG = pop_MarkThreshold()';
+    EEG = notes_MarkThreshold(EEG);  %Add info on trials marked for rejection to notes field
+end
+
